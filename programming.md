@@ -1,5 +1,310 @@
 ## Programming
 
+### Exercises
+
+*   **In any dictionary of the English language, consider the graph that
+    connects each main entry to each word used in its definitions. What
+    are the strongly connected components in this graph?**
+
+*   **Implement a copy-on-write database.**
+
+
+### Databases
+
+*   **What are the advantage of columnar data storage?**
+
+
+### ELF
+
+*   **Suppose `program` links with `mylib1.so` and `other.so`, which
+    links against `mylib2.so`. Assume both `mylib` versions export some
+    of the same symbols. When we run `program`, what happens? Do we get
+    accidental interposition?**
+
+    This is a question about the behavior of the dynamic linker,
+    `ld-linux.so`.
+
+    The only documentation I know of for this whole process is "How To
+    Write Shared Libraries" by Ulrich Drepper,
+    <https://software.intel.com/sites/default/files/m/a/1/e/dsohowto.pdf>.
+
+    In this case:
+
+    All four are loaded: `program`, `mylib1.so`, `other.so`, `mylib2.so`
+    in that order. Then symbol references are resolved; I believe for
+    each symbol reference, `ld-linux.so` probes the three libraries in
+    order until it finds a definition.
+
+    This means that, yes, we do get accidental interposition. Don't do
+    this.
+
+*   **Can I use ELF relocations to do arithmetic at link time?**
+
+    No, it isn't nearly that fancy.
+
+    But also, jimb writes: "You are thinking about ELF as a language
+    that the linker interprets, and assuming it must be specified, but I
+    think it is just barely even documented everything a Linux linker is
+    expected to find and process"
+
+    DWARF, on the other hand...
+
+
+### Very specific questions about particular programming languages
+
+*   **In DTrace's D language, is division banned within predicates?**
+
+    I guess you probably have to parenthesize...
+
+
+### Loop invariants
+
+https://alastairreid.github.io/RelatedWork/papers/tuerk:vstte:2010/
+
+*   **What are some examples of how this applies to loops?**
+
+    Here's some code that passes the Dafny verifier:
+
+    ```dafny
+    function expt(b: nat, e: nat): (c: nat)
+      requires b != 0 || e != 0
+    {
+      if e == 0 then 1
+      else if b == 0 then 0
+      else b * expt(b, e - 1)
+    }
+
+    method pow(b: nat, e: nat) returns (z: nat)
+      requires b != 0 && e != 0
+      ensures z == expt(b, e)
+    {
+      var x := b;
+      var y := e;
+      z := 1;
+      while y > 0
+        invariant x != 0
+        invariant z * expt(x, y) == expt(b, e)
+      {
+        while y % 2 == 0
+          invariant x != 0 && y > 0
+          invariant z * expt(x, y) == expt(b, e)
+          decreases y - 1
+        {
+          doubling_lemma(x, y);
+          x := x * x;
+          y := y / 2;
+        }
+        z := z * x;
+        y := y - 1;
+      }
+    }
+
+    // x² = x * x.
+    lemma x_squared_lemma(x: nat)
+      ensures expt(x, 2) == x * x
+    {
+      assert expt(x, 1) == x;
+      assert expt(x, 2) == x * expt(x, 1);
+    }
+
+    // If y is even, then x^y == (x * x) ^ (y/2).
+    lemma doubling_lemma(x: nat, y: nat)
+      requires x != 0 && y != 0 && y % 2 == 0
+      ensures expt(x * x, y / 2) == expt(x, y)
+    {
+      if y == 2 {
+        x_squared_lemma(x);
+        assert expt(x * x, 1) == x * x == expt(x, 2);
+      } else {
+        doubling_lemma(x, y - 2);
+      }
+    }
+    ```
+
+
+### Algebraic effects
+
+https://www.microsoft.com/en-us/research/wp-content/uploads/2016/08/algeff-tr-2016-v3.pdf
+
+*   **What is the syntax here?**
+
+    `effect name { ...primitive_operations... }` defines an effect.
+
+    The primitive operations are a suite of things a function can do under this effect
+    in addition to mere computation.
+
+    Each primitive operation has typed parameters and a return type,
+    like a function.
+
+    `handle (action) { ...cases... }` is `dynamic-wind` for setting up
+    effect handlers.  It calls a function, *action*, with no arguments,
+    and for the dynamic extent of the call, some effect handlers are
+    installed.
+
+    Each of the `cases` matches `pattern -> expression` where *expression*
+    may contain the special expression `resume(expr)`.
+
+    It is syntactic sugar for `(handler { ...cases... })(action)`
+
+    `handler (param0, ...) { ...cases... }` evaluates to a function that
+    takes one argument, an action function, and calls it with some effect handlers.
+    It first evaluates the optional `params`, then
+
+    In a handler, each case matches `pattern -> expression`, where *expression*
+    may contain the special expression `resume(args, resume_expr)`.
+
+#### Transferring knowledge from Koka to Unison
+
+*   **Implement exceptions using effects.**
+
+*   **Implement a single-variable state system using effects.**
+
+*   **Implement a multiple-variable mutable data store using effects.**
+
+*   **Is it possible to implement something like the ST monad using effects?**
+
+*   **Implement `yield` and generators using effects.**
+
+*   **Implement `amb` using effects.**
+
+*   **Implement `async`/`await` using effects.**
+
+*   **Implement a combinatorial parser library using effects.**
+
+
+### Unison
+
+<https://www.youtube.com/watch?v=gCWtkvDQ2ZI>
+
+*   **Generally speaking, how do we do all the things source files do
+    for us in normal programming languages?**
+
+    -   How do we store comments and whitespace?
+
+    -   How are argument names stored (since the presentation
+        specifically points out that the hashing algorithm normalizes
+        them away)?
+
+    -   How do we collect related code into bundles, for convenient
+        learning and editing, like classes or modules, or files and
+        directories?
+
+    -   How do we answer questions like "who wrote this" or "is this the
+        official current version of this library"?
+
+    -   How do we mark some tests as the official tests for the library
+        you're working on?
+
+    The ability to search is touted, but `.u` files are called "scratch"
+    files and are apparently considered stricly temporary. Whatever the
+    plan is for comments, they don't go with your code!
+
+*   **Are there lambdas? If so, are they stored separately from the
+    containing function?**
+
+*   **How do we do mutual recursion if every function contains a hash of
+    its dependencies?**
+
+*   **Is this stuff typed?**
+
+    Yes, there's a type system.
+
+*   **It says here, "No builds". But don't you have to rebuild the
+    entire downstream world every time you change anything, exactly like
+    Nix? Same for testing.**
+
+*   **The type is stored separately from the AST. Why?**
+
+*   **Is the object store implicitly trusted? For example, can malicious
+    data in the store break the type system?**
+
+    "No one else needs to parse or type-check `factorial` either" makes
+    it sounds like these received judgments about the code are
+    implicitly trusted.
+
+    You're requesting, downloding, and running code from a peer. You
+    presumably trust them to *some* extent. But still.
+
+*   **Is there a back edge from the object store to sources?**
+
+*   **At 25:00, this view of dependency conflicts is a lot like
+    Nix's. Does anyone agree with this? Isn't the use of old versions
+    likely to be accidental and bad? Isn't this dodging the issue?**
+
+*   **At 29:00, this suggests providing an upgrade path for old versions
+    of types. Is there actually a system for that? It seems like if you
+    find upgrades by querying and searching the universe, you could have
+    diamonds in that upgrade graph—competing paths. Also it's not clear
+    you want to trust all that code.**
+
+*   **Does having a `Node` value imply you have full control over the
+    referenced node? Can you cancel computation?**
+
+*   **But isn't it actually pretty easy to make things transparent?
+    Isn't the real challenge giving things the right amount of
+    transparency, and letting users say useful stuff, like "run this
+    closer to the data"? For example, is `spawn` actually good? How does
+    the system know whether or not to run that code elsewhere? Isn't
+    guessing that correctly essential to performance?**
+
+*   **Abilities are Unison's effect system. Are abilities also like
+    typeclasses/traits/interfaces? Is there something else like that
+    instead?**
+
+*   **Do abilities have associated types?**
+
+
+
+### Lean
+
+*   **What is the difference between `let` and `have`?
+    The following example contains a `let` clause and a `have` clause.
+    Changing `let` to `have` works fine, with no apparent effect.
+    Changing `have` to `let` breaks the type inference. Why?**
+
+    ```lean
+    example (p q r : Prop) : p ∧ (q ∨ r) → (p ∧ q) ∨ (p ∧ r) :=
+    begin
+      intro h,
+      let hp : p := h.left,
+      have hqr : q ∨ r := h.right,
+      show (p ∧ q) ∨ (p ∧ r),
+      cases hqr with hq hr,
+        exact or.inl ⟨hp, hq⟩,
+      exact or.inr ⟨hp, hr⟩
+    end
+    ```
+
+
+
+### Fuzzing / Property Testing
+
+#### QuickCheck: A Lightweight Tool for Random Testing of Haskell Programs
+
+http://www.eecs.northwestern.edu/~robby/courses/395-495-2009-fall/quick.pdf
+
+*   **What does this mean: "Random testing is especially suitable for
+    functional programs because properties can be stated at a fine
+    grain."?**
+
+    It means that the parts of programs, even at small scale, are
+    effect-free and implicit-context-free. They can be called many
+    times, in the same process, no worries; and the input *is* the test
+    case.
+
+
+
+#### Skeletal Program Enumeration for Rigorous Compiler Testing
+
+Qirun Zhang, Chengnian Sun, Zhendong Su. UC Davis.
+
+https://arxiv.org/pdf/1610.03148.pdf
+
+*   **How does this paper answer the question it poses of "how to
+    effectively generate 'good' test programs"?**
+
+
+
 ### Concurrency and specifications
 
 #### http://drops.dagstuhl.de/opus/volltexte/2018/10088/pdf/LIPIcs-OPODIS-2018-28.pdf
@@ -160,3 +465,32 @@
 
 *   **The last axiom is asymmetric. Is there a commonsense example that
     illustrates the asymmetry?**
+
+
+### Miscellaneous
+
+*   **What is the deal with "signaling NaNs"?**
+
+    About half of the NaNspace is signaling NaNs; there's a bit.
+
+    If you're doing NaN-boxing, like `JS::Value`, you'll always check
+    before doing math, so the behavior on NaNs doesn't matter.
+
+    To check: SM's canonical NaN Value is quiet (not signaling).
+
+    The spec says that most operations fire an exception when applied to
+    a signaling NaN. This means special implementation-defined behavior:
+    an interrupt or POSIX signal. The default behavior is for the
+    operation to return a quiet NaN (the same, I suppose, as if the
+    input signaling NaN or NaNs had been quiet to begin with).
+
+    GNU libc has a very special implementation-specific function that
+    causes operations on signaling NaNs to fire a POSIX `SIGFPE` signal.
+    It's "not very useful" according to the manual, but you can throw a
+    C++ exception (yow). MSVC has something similar.
+
+    All of this behavior should be strongly deprecated, so that adding
+    numbers generally has defined behavior.
+
+*   **What's a good textbook about the security of cryptographic
+    protocols?**
